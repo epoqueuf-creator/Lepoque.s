@@ -10,82 +10,94 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- KONFIGURATION ---
-        let firebaseConfig = {};
-        // 1. Försök hitta config i den automatiska miljön
+        // --- DIN EGNA KONFIGURATION (NU IFYLLD) ---
+        const myFirebaseConfig = {
+            apiKey: "AIzaSyDIfUUZP29Oe6oF7MLhOSWTK8Rt3ReLWM8",
+            authDomain: "lepoque-cc738.firebaseapp.com",
+            projectId: "lepoque-cc738",
+            storageBucket: "lepoque-cc738.firebasestorage.app",
+            messagingSenderId: "41599598754",
+            appId: "1:41599598754:web:42e6313172a12cc98f97fb",
+            measurementId: "G-W5L1FQF4C4"
+        };
+
+        // --- STARTKOD ---
+        let firebaseConfig = myFirebaseConfig;
+        
+        // Stöd för förhandsgranskning
         if (typeof __firebase_config !== 'undefined') {
             firebaseConfig = JSON.parse(__firebase_config);
-        } 
-        // 2. Försök hitta config i URL (om man öppnar filen manuellt)
-        else {
-             firebaseConfig = JSON.parse(new URLSearchParams(window.location.search).get("firebase_config") || "{}");
         }
 
-        // Om ingen config hittas, visa fel (Detta händer om man kör lokalt utan setup)
-        if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
-            console.warn("Varning: Ingen Firebase-config hittades. Formuläret kommer inte kunna skickas om du kör detta lokalt utanför miljön.");
-        } else {
-            const app = initializeApp(firebaseConfig);
-            const auth = getAuth(app);
-            const db = getFirestore(app);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // Hantera både lokal och hostad miljö
+        const collectionName = (firebaseConfig === myFirebaseConfig) ? 'inquiries' : 'public/data/inquiries';
+        const appIdPrefix = (firebaseConfig === myFirebaseConfig) ? '' : (typeof __app_id !== 'undefined' ? 'artifacts/' + __app_id + '/' : '');
+
+        // Autentisering
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                console.log("Databasanslutning klar.");
+            } catch (err) {
+                console.error("Auth fel:", err);
+            }
+        };
+        initAuth();
+
+        // Skicka funktionen
+        window.sendToDatabase = async function(event) {
+            event.preventDefault(); 
             
-            // App ID för att matcha admin-sidan
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'lepoque-live-v1';
+            const btn = event.target.querySelector('button');
+            const originalText = btn.innerText;
+            btn.innerText = "Skickar...";
+            btn.disabled = true;
 
-            // Autentisering
-            const initAuth = async () => {
-                try {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                    console.log("Databasanslutning lyckades.");
-                } catch (err) {
-                    console.error("Auth fel:", err);
+            const form = event.target;
+            const namn = form.namn.value;
+            const email = form.email.value;
+            const meddelande = form.meddelande.value;
+
+            if (!auth.currentUser) await initAuth();
+
+            try {
+                let collRef;
+                if (firebaseConfig === myFirebaseConfig) {
+                    collRef = collection(db, 'inquiries');
+                } else {
+                    collRef = collection(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default', 'public', 'data', 'inquiries');
                 }
-            };
-            initAuth();
 
-            // Skicka funktionen
-            window.sendToDatabase = async function(event) {
-                event.preventDefault(); 
-                
-                const btn = event.target.querySelector('button');
-                const originalText = btn.innerText;
-                btn.innerText = "Skickar...";
-                btn.disabled = true;
+                await addDoc(collRef, {
+                    namn: namn,
+                    email: email,
+                    meddelande: meddelande,
+                    tid: serverTimestamp(),
+                    status: 'ny'
+                });
 
-                const form = event.target;
-                const namn = form.namn.value;
-                const email = form.email.value;
-                const meddelande = form.meddelande.value;
-
-                if (!auth.currentUser) await initAuth();
-
-                try {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'inquiries'), {
-                        namn: namn,
-                        email: email,
-                        meddelande: meddelande,
-                        tid: serverTimestamp(),
-                        status: 'ny'
-                    });
-
-                    alert("Tack! Ditt meddelande har skickats till arkivet.");
-                    form.reset();
-                } catch (error) {
-                    console.error("Fel vid sparning:", error);
-                    alert("Kunde inte skicka: " + error.message);
-                } finally {
-                    btn.innerText = originalText;
-                    btn.disabled = false;
-                }
+                // ÅTERSTÄLLT TILL ALERT
+                alert("Tack! Ditt meddelande har skickats.");
+                form.reset();
+            } catch (error) {
+                console.error("Fel vid sparning:", error);
+                // ÅTERSTÄLLT TILL ALERT
+                alert("Kunde inte skicka: Kontrollera din anslutning eller Firebase-inställningar.");
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
             }
         }
     </script>
     <style>
-        /* --- GRUNDLÄGGANDE STIL --- */
         :root {
             --bg-color: #ffffff;
             --text-color: #000000;
@@ -94,11 +106,7 @@
             --font-body: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: var(--font-body);
@@ -111,24 +119,10 @@
             min-height: 100vh;
         }
 
-        a {
-            text-decoration: none;
-            color: inherit;
-            cursor: pointer;
-            transition: opacity 0.3s;
-        }
+        a { text-decoration: none; color: inherit; cursor: pointer; transition: opacity 0.3s; }
+        a:hover { opacity: 0.7; }
+        img { max-width: 100%; height: auto; display: block; }
 
-        a:hover {
-            opacity: 0.7;
-        }
-
-        img {
-            max-width: 100%;
-            height: auto;
-            display: block;
-        }
-
-        /* --- HEADER & NAV --- */
         header {
             display: flex;
             flex-direction: column;
@@ -142,16 +136,9 @@
             transition: transform 0.3s ease;
         }
 
-        header.nav-hidden {
-            transform: translateY(-100%);
-        }
+        header.nav-hidden { transform: translateY(-100%); }
 
-        .logo-container {
-            margin-bottom: 1.5rem;
-            text-align: center;
-            cursor: pointer;
-        }
-
+        .logo-container { margin-bottom: 1.5rem; text-align: center; cursor: pointer; }
         .site-title {
             font-family: var(--font-heading);
             font-size: 2rem;
@@ -170,40 +157,19 @@
             letter-spacing: 1px;
         }
 
-        nav ul li a {
-            padding-bottom: 5px;
-            border-bottom: 2px solid transparent;
-        }
+        nav ul li a { padding-bottom: 5px; border-bottom: 2px solid transparent; }
+        nav ul li a.active { border-bottom: 2px solid #000; }
 
-        nav ul li a.active {
-            border-bottom: 2px solid #000;
-        }
-
-        /* --- PAGE STRUCTURE (SPA) --- */
-        .page {
-            display: none;
-            animation: fadeIn 0.5s ease;
-            flex: 1;
-        }
-
-        .page.active {
-            display: block;
-        }
+        .page { display: none; animation: fadeIn 0.5s ease; flex: 1; }
+        .page.active { display: block; }
 
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* --- HERO --- */
-        .hero {
-            position: relative;
-            padding: 4rem 1rem;
-            text-align: center;
-            background-color: #fafafa;
-        }
+        .hero { position: relative; padding: 4rem 1rem; text-align: center; background-color: #fafafa; }
         
-        /* --- CONTENT --- */
         .content-section {
             padding: 4rem 1rem;
             max-width: 1200px;
@@ -214,154 +180,40 @@
             align-items: center;
         }
 
-        .content-image {
-            width: 100%;
-            border-radius: 4px;
-        }
-
-        .content-text {
-            text-align: left;
-        }
-
-        .content-text h2 {
-            font-family: var(--font-heading);
-            font-size: 2.5rem;
-            margin-bottom: 1.5rem;
-            font-weight: normal;
-        }
-
-        .content-text p {
-            font-size: 1.1rem;
-            margin-bottom: 2rem;
-            color: #444;
-        }
+        .content-image { width: 100%; border-radius: 4px; }
+        .content-text { text-align: left; }
+        .content-text h2 { font-family: var(--font-heading); font-size: 2.5rem; margin-bottom: 1.5rem; font-weight: normal; }
+        .content-text p { font-size: 1.1rem; margin-bottom: 2rem; color: #444; }
 
         .btn {
-            display: inline-block;
-            padding: 12px 30px;
-            background-color: #000;
-            color: #fff;
-            text-transform: uppercase;
-            font-size: 0.9rem;
-            letter-spacing: 1px;
-            border: 1px solid #000;
-            cursor: pointer;
+            display: inline-block; padding: 12px 30px; background-color: #000; color: #fff;
+            text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; border: 1px solid #000; cursor: pointer;
         }
+        .btn:hover { background-color: #fff; color: #000; }
 
-        .btn:hover {
-            background-color: #fff;
-            color: #000;
-        }
+        .specs-table { width: 100%; border-collapse: collapse; margin-top: 2rem; }
+        .specs-table th, .specs-table td { text-align: left; padding: 1rem; border-bottom: 1px solid #eee; }
+        .specs-table th { font-weight: bold; width: 40%; color: #333; }
 
-        /* --- TABLES --- */
-        .specs-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 2rem;
-        }
+        .about-text-container { max-width: 800px; margin: 0 auto; padding: 4rem 1rem; text-align: center; }
 
-        .specs-table th, .specs-table td {
-            text-align: left;
-            padding: 1rem;
-            border-bottom: 1px solid #eee;
-        }
+        .design-section { background-color: #000; color: #fff; text-align: center; padding: 6rem 1rem; }
+        .design-section h2 { font-family: var(--font-heading); font-size: 3rem; margin-bottom: 2rem; }
+        .email-link { font-weight: bold; font-size: 1.3rem; border-bottom: 1px solid #fff; display: inline-block; margin-top: 1rem; }
 
-        .specs-table th {
-            font-weight: bold;
-            width: 40%;
-            color: #333;
-        }
+        .contact-form { max-width: 600px; margin: 2rem auto; text-align: left; }
+        .form-group { margin-bottom: 1.5rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+        .form-group input, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ccc; font-family: inherit; }
 
-        /* --- OM OSS --- */
-        .about-text-container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 4rem 1rem;
-            text-align: center;
-        }
+        footer { text-align: center; padding: 2rem; font-size: 0.8rem; color: #666; border-top: 1px solid #eee; margin-top: auto; }
 
-        /* --- DESIGN SECTION --- */
-        .design-section {
-            background-color: #000;
-            color: #fff;
-            text-align: center;
-            padding: 6rem 1rem;
-        }
-
-        .design-section h2 {
-            font-family: var(--font-heading);
-            font-size: 3rem;
-            margin-bottom: 2rem;
-        }
-
-        .email-link {
-            font-weight: bold;
-            font-size: 1.3rem;
-            border-bottom: 1px solid #fff;
-            display: inline-block;
-            margin-top: 1rem;
-        }
-
-        .contact-form {
-            max-width: 600px;
-            margin: 2rem auto;
-            text-align: left;
-        }
-
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .form-group input, .form-group textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            font-family: inherit;
-        }
-
-        /* --- FOOTER --- */
-        footer {
-            text-align: center;
-            padding: 2rem;
-            font-size: 0.8rem;
-            color: #666;
-            border-top: 1px solid #eee;
-            margin-top: auto;
-        }
-
-        /* --- RESPONSIVITET --- */
         @media (max-width: 768px) {
-            nav ul {
-                gap: 1rem;
-                font-size: 0.75rem;
-            }
-            
-            .content-section {
-                grid-template-columns: 1fr;
-                text-align: center;
-                gap: 2rem;
-            }
-
-            .content-text {
-                text-align: center;
-                order: 2;
-            }
-            
-            .content-image-wrapper {
-                order: 1;
-            }
-
-            .design-section h2 {
-                font-size: 2rem;
-            }
+            nav ul { gap: 1rem; font-size: 0.75rem; }
+            .content-section { grid-template-columns: 1fr; text-align: center; gap: 2rem; }
+            .content-text { text-align: center; order: 2; }
+            .content-image-wrapper { order: 1; }
+            .design-section h2 { font-size: 2rem; }
         }
     </style>
 </head>
@@ -425,11 +277,10 @@
                 Vår vision är att kombinera klassisk estetik med moderna kvalitetskrav. Varje klocka är noggrant utvald och sammansatt för att ge bäraren en känsla av exklusivitet och hållbarhet.
             </p>
             
-            <div style="background-color: #f5f5f5; width: 100%; max-width: 500px; height: 350px; margin: 3rem auto; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed #999; color: #666;">
-                <span style="font-size: 3rem; margin-bottom: 1rem;">📷</span>
-                <p>Bild på Teamet / Grundarna</p>
-                <small style="margin-top: 0.5rem; color: #999;">(Ladda upp din egen bild)</small>
-            </div>
+            <img src="Skärmavbild 2025-12-03 kl. 13.07.10.jpg" 
+                 onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=800&q=80';" 
+                 alt="Grundarna av L´EPOQUÉ" 
+                 style="max-width: 100%; height: auto; display: block; margin: 2rem auto; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
         </div>
     </main>
 
@@ -510,7 +361,7 @@
     <footer>
         <p>&copy; 2025 L´EPOQUÉ UF</p>
         <div style="margin-top: 10px;">
-            <a onclick="alert('Cookie settings')">Cookies</a>
+            <a onclick="alert('Inställningar för kakor')">Cookies</a>
         </div>
     </footer>
 
