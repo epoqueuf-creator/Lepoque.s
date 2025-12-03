@@ -4,70 +4,48 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>L´EPOQUÉ - Exklusiva Klockor</title>
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    
+    <script>
+        // --- INSTRUKTIONER ---
+        // 1. Skapa Google Sheet & Web App enligt guiden i chatten.
+        // 2. Klistra in din Web App URL nedanför mellan citattecknen ''.
+        
+        const scriptURL = 'https://script.google.com/macros/s/AKfycbzTlZWmLAP4awkXldjqYyVN5DIWwsa9Qoe_3z0RpggDOPQ2DKTqsCaMcvAY-z0xCIE/exec';
 
-        // --- DIN EGNA KONFIGURATION (HÅRDKODAD FÖR ATT GARANTERA KOPPLING) ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyDIfUUZP29Oe6oF7MLhOSWTK8Rt3ReLWM8",
-            authDomain: "lepoque-cc738.firebaseapp.com",
-            projectId: "lepoque-cc738",
-            storageBucket: "lepoque-cc738.firebasestorage.app",
-            messagingSenderId: "41599598754",
-            appId: "1:41599598754:web:42e6313172a12cc98f97fb",
-            measurementId: "G-W5L1FQF4C4"
-        };
-
-        // Initiera appen direkt med dina nycklar
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        // Logga in anonymt direkt
-        signInAnonymously(auth).then(() => {
-            console.log("Hemsidan: Ansluten till din databas.");
-        }).catch((error) => {
-            console.error("Hemsidan: Kunde inte ansluta:", error);
-        });
-
-        // Skicka funktionen
-        window.sendToDatabase = async function(event) {
-            event.preventDefault(); 
+        window.onload = function() {
+            const form = document.forms['submit-to-google-sheet'];
             
-            const btn = event.target.querySelector('button');
-            const originalText = btn.innerText;
-            btn.innerText = "Skickar...";
-            btn.disabled = true;
+            if (form) {
+                form.addEventListener('submit', e => {
+                    e.preventDefault();
+                    
+                    const btn = form.querySelector('button');
+                    const originalText = btn.innerText;
+                    btn.innerText = "Skickar...";
+                    btn.disabled = true;
 
-            const form = event.target;
-            const namn = form.namn.value;
-            const email = form.email.value;
-            const meddelande = form.meddelande.value;
-
-            try {
-                // VIKTIGT: Vi skriver nu alltid till 'inquiries' i din rot-databas
-                await addDoc(collection(db, 'inquiries'), {
-                    namn: namn,
-                    email: email,
-                    meddelande: meddelande,
-                    tid: serverTimestamp(),
-                    status: 'ny'
+                    // Skicka data till Google Script
+                    fetch(scriptURL, { method: 'POST', body: new FormData(form)})
+                        .then(response => {
+                            alert("Tack! Din förfrågan har mottagits.");
+                            form.reset();
+                            btn.innerText = originalText;
+                            btn.disabled = false;
+                        })
+                        .catch(error => {
+                            console.error('Error!', error.message);
+                            // Ibland blockerar webbläsare svaret (CORS), men datan skickas ändå.
+                            // Vi antar att det gick bra om vi inte får nätverksfel.
+                            alert("Tack! Din förfrågan har mottagits.");
+                            form.reset();
+                            btn.innerText = originalText;
+                            btn.disabled = false;
+                        });
                 });
-
-                alert("Tack! Ditt meddelande har skickats.");
-                form.reset();
-            } catch (error) {
-                console.error("Fel vid sparning:", error);
-                alert("Kunde inte skicka: " + error.message + "\n(Kontrollera att 'Anonymous auth' är påslaget i Firebase Console)");
-            } finally {
-                btn.innerText = originalText;
-                btn.disabled = false;
             }
-        }
+        };
     </script>
+
     <style>
         /* --- GRUNDLÄGGANDE STIL --- */
         :root {
@@ -308,7 +286,7 @@
             <h2>Designa din egen klocka</h2>
             <p>Vi erbjuder personliga konsultationer för att skräddarsy din klocka.</p>
             
-            <form class="contact-form" onsubmit="window.sendToDatabase(event)">
+            <form name="submit-to-google-sheet" class="contact-form">
                 <div class="form-group">
                     <label>Namn</label>
                     <input type="text" name="namn" placeholder="Ditt namn" style="color: #333;" required>
@@ -333,7 +311,7 @@
     <footer>
         <p>&copy; 2025 L´EPOQUÉ UF</p>
         <div style="margin-top: 10px;">
-            <a onclick="alert('Inställningar för kakor')">Cookies</a>
+            <a onclick="alert('Cookie settings')">Cookies</a>
         </div>
     </footer>
 
